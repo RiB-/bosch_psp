@@ -1,0 +1,7 @@
+*.pyc
+*.ipynb
+*.csv
+*.gz
+*.zip
+*.log
+*.cred
