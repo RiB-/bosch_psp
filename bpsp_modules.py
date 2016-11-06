@@ -22,7 +22,7 @@ from sklearn.metrics import matthews_corrcoef as MCC
 from sklearn.metrics import make_scorer
 from sklearn.feature_selection import RFECV
 from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler, Imputer
 import xgboost as xgb
 #-----------------------------
 # User defined modules and functions
@@ -119,6 +119,21 @@ class FeatsManipulator():
         pass
     #end
 
+    def rebalancer(self, df, label_id='Response', balance_ratio=0.1, sample_index=None):
+        '''
+        '''
+        logger.info('Rebalancing Train Datasets...')
+        if isinstance(sample_index, pd.Int64Index):
+            df = df.ix[sample_index]
+        else:
+            one_count = len(df[df[label_id]==1])
+            sample_n = ((1 - balance_ratio) / balance_ratio) * one_count
+            df = pd.concat((df[df[label_id]==1], df[df[label_id]==0].sample(n=int(sample_n))))
+        #end
+        ind = df.index
+        return df.reset_index(drop=True), ind
+    #end
+
     def engineer_bool(self, bool_sr):
         '''
         Turne boolean series into binary
@@ -142,26 +157,58 @@ class FeatsManipulator():
         return float_sr
     #end
 
-    def float_imputer(self, df_ls, exclude_col_ls, strategy='mean'):
+    def low_st_remover(self, df, threshold=0.0):
         '''
         '''
-        for loc, (df, exclude_cols) in enumerate(zip(df_ls, exclude_col_ls)):
-            cols = [col for col in df.columns if col not in exclude_cols]
-            df_ls[loc][cols] = Imputer(strategy=strategy, axis=0).fit_trasnform(df[cols])
-        #end
-        return df_ls
+        return df.loc[:, df.std()>threshold]
     #end
 
-    def float_scaler(self, df_ls, exclude_col_ls, strategy='mean'):
+    def float_imputer(self, df, exclude_col_ls=None, Imputer_obj=None, strategy='mean'):
         '''
         '''
-        pass
+        logger.info('Imputing numeric columns...')
+        if exclude_col_ls==None:
+            exclude_col_ls = []
+        #end
+        col_ls = [col for col in df.columns if col not in exclude_col_ls]
+        if Imputer_obj==None:
+            Imputer_obj = Imputer(strategy=strategy, axis=0)
+            try:
+                logger.info('I am trying')
+                df[col_ls] = Imputer_obj.fit_transform(df[col_ls])
+                logger.info('It looks like I succeded. I am  puzzled.')
+            except:
+                logger.info('Something went wrong')
+                return agoiang
+            #end
+        else:
+            df[col_ls] = Imputer_obj.transform(df[col_ls])
+        #end
+        return df, Imputer_obj
+    #end
+
+    def float_scaler(self, df, exclude_col_ls=None, Scaler_obj=None):
+        '''
+        '''
+        logger.info('Performing scaling of numeric features...')
+        if exclude_col_ls==None:
+            exclude_col_ls = []
+        #end
+        col_ls = [col for col in df.columns if col not in exclude_col_ls]
+        if Scaler_obj==None:
+            Scaler_obj = StandardScaler()
+            df[col_ls] = Scaler_obj.fit_transform(df[col_ls])
+        else:
+            df[col_ls] = Scaler_obj.transform(df[col_ls])
+        #end
+        return df, Scaler_obj
     #end
 
     def unpack_date(self, df):
         '''
         Creates new DF columns with year, month, day and weekend
         '''
+        logger.info('Unpacking data column...')
         if 'date' in df.columns:
             df['year'] = df['date'].dt.year
             df['month'] = df['date'].dt.month
@@ -235,6 +282,7 @@ class FeatsManipulator():
     def data_cleansing(self, df, exclude_ls):
         '''
         '''
+        logger.info('Performing final cleaning of datasets...')
         if exclude_ls==None:
             exclude_ls = []
         #end
@@ -256,16 +304,27 @@ class FeatsManipulator():
     def preliminary_manipulation(self, df_dc):
         '''
         '''
+        logger.info('Performing a preliminary manipulation of the datasets...')
         n_train_df, n_test_df = self.add_timestamp_cols(df_dc['train_numeric_df'], df_dc['test_numeric_df'], 
                                                         df_dc['train_date_df'], df_dc['test_date_df'],
                                                         non_feats_ls=['Id'])
+        n_train_df = self.low_st_remover(n_train_df, threshold=0.0)
+        n_test_df = n_test_df[[col for col in n_train_df.columns if col not in ['Response']]]
+        n_train_df, balance_ind = self.rebalancer(n_train_df, label_id='Response', balance_ratio=0.01)
+        n_train_df, Imputer_obj = self.float_imputer(n_train_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=None, strategy='mean')
+        n_test_df, Imputer_obj = self.float_imputer(n_test_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=Imputer_obj, strategy='mean')
+        n_train_df, Scaler_obj = self.float_scaler(n_train_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=None)
+        n_test_df, Scaler_obj = self.float_scaler(n_test_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=Scaler_obj)
+
         full_n_df = self.add_test_flag_and_merge(n_train_df, n_test_df, flag_type='int')
         full_n_df = self.add_leaks(full_n_df)
         full_n_df = self.data_cleansing(full_n_df, exclude_ls=['Id', 'is_test', 'Response'])
 
         c_train_df, c_test_df = df_dc['train_categorical_df'], df_dc['test_categorical_df']
+        c_train_df, balance_ind = self.rebalancer(c_train_df, label_id='Response', sample_index=balance_ind)
         full_c_df = self.add_test_flag_and_merge(c_train_df, c_test_df, flag_type='str')
         full_c_df = self.data_cleansing(full_c_df, exclude_ls=['Id', 'is_test'])
+        logger.info('Preliminary manipulation of datasets performed.')
         return full_n_df.sort_values(by='Id'), full_c_df.sort_values(by='Id')
     #end
 
@@ -334,7 +393,7 @@ class PrelFeatsSelector():
             sample_dc['numeric'], sample_dc['categorical'] = 1.0, 1.0
             logger.info('Preliminary feature selection will be performed without downsampling of datasets.')
         else:
-            logger.info('Sampling for feature selection: %s numeric and %s categorical' (str(sample_dc['numeric']), str(sample_dc['categorical'])))
+            logger.info('Sampling for feature selection: %s numeric and %s categorical' % (str(sample_dc['numeric']), str(sample_dc['categorical'])))
         #end
         return sample_dc
     #end
@@ -345,9 +404,10 @@ class PrelFeatsSelector():
         score = make_scorer(MCC, greater_is_better=True)
         rfecv = RFECV(estimator=self.Classifier, step=100, cv=StratifiedKFold(3), scoring=score)
         feat_ls = [col for col in feats_df.columns if col!=label_id]
-        feat_arr = np.array(feats_df[feat_ls].sample(frac=self.sample_dc['numeric']))
-        label_arr = feats_df[label_id].ravel()
-        rfecv.fit(feat_arr, label_arr)
+        feats_df = feats_df.sample(frac=self.sample_dc['numeric'])
+        feat_ar = np.array(feats_df[feat_ls])
+        label_ar = feats_df[label_id].ravel()
+        rfecv.fit(feat_ar, label_ar)
         if self.best:
             ranked_feats_idx = [idx for idx, rank in enumerate(rfecv.ranking_) if rank==1]
         else:
@@ -383,6 +443,9 @@ class PrelFeatsSelector():
     #end
 
     def select_feats(self, feats_df, label_id='response', feat_type='numeric'):
+        logger.info('Performing features selection...')
+        logger.info('Number of features to be selected: %s numeric, %s categorical' % (str(self.n_thresh), str(self.c_thresh)))
+        logger.info('Downsampling for speed: %s numeric, %s cateforical' % (str(self.sample_dc['numeric']), str(self.sample_dc['categorical'])))
         if feat_type=='numeric':
             logger.info('Fitting Recursive Feature Elimination Model for numeric feature selection...')
             ranked_feats_ls = self.num_feats_selector(feats_df, label_id, self.n_thresh)
@@ -390,6 +453,7 @@ class PrelFeatsSelector():
             logger.info('Performing feature ranking for categorical features...')
             ranked_feats_ls = self.cat_feats_selector(feats_df, label_id, self.c_thresh)
         #end
+        logger.info('Feature ranking complete!')
         return ranked_feats_ls
     #end
 
@@ -404,6 +468,9 @@ class Assembler():
     #end
 
     def assemble_train_test(self, n_df, c_df):
+        '''
+        '''
+        logger.info('Assembling training dataset...')
         test_id_ar = n_df['Id'][n_df['is_test']==1].astype(int).ravel()
         response_ar = n_df['Response'][n_df['is_test']==0].astype(int).ravel()
 
@@ -420,6 +487,7 @@ class Assembler():
         assembled_train_ar = sparse.hstack([train_n_ar, encoded_train_ar])
         assembled_test_ar = sparse.hstack([test_n_ar, encoded_test_ar])
        
+        logger.info('Training dataset assembled!')
         return  assembled_train_ar, response_ar, assembled_test_ar, test_id_ar
     #end
 
@@ -468,11 +536,80 @@ class ThresholdOptimizer():
         pass
     #end
 
-    def get_threshold(self):
+    def get_threshold(self, prob_ls_ls=None, true_ls_ls=None):
         return 0.5
     #end
 
 #end
+
+class MCCThresholdOptimizer():
+    '''
+    '''
+    def __init__(self):
+        pass
+    #end
+    def mcc(self, tp, tn, fp, fn):
+        sup = tp * tn - fp * fn
+        inf = (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)
+        if inf==0:
+            return 0
+        else:
+            return sup / np.sqrt(inf)
+        #end
+    #end
+
+    def eval_mcc(self, y_true_ls, y_prob_ls, show=False):
+        idx = np.argsort(y_prob_ls)
+        sorted_y_true_ls = y_true_ls[idx]
+        n_el = y_true_ls.shape[0]
+        num_pos = 1.0 * np.sum(y_true_ls) # number of positive
+        num_neg = n_el - num_pos # number of negative
+        tp, tn, fp, fn = num_pos, 0.0, num_neg, 0.0
+        best_id = prev_proba = best_proba = -1
+        best_mcc = 0.0
+        mccs = np.zeros(n_el)
+        for iel in range(n_el):
+            # all items with idx < iel are predicted negative while others are predicted positive
+            # only evaluate mcc when probability changes
+            proba = y_prob_ls[idx[iel]]
+            if proba != prev_proba:
+                prev_proba = proba
+                new_mcc = self.mcc(tp, tn, fp, fn)
+                if new_mcc >= best_mcc:
+                    best_mcc = new_mcc
+                    best_id = iel
+                    best_proba = proba
+                #end
+            #end
+            mccs[iel] = new_mcc
+            if sorted_y_true_ls[iel] == 1:
+                tp = tp - 1.0
+                fn = fn + 1.0
+            else:
+                fp = fp - 1.0
+                tn = tn + 1.0
+            #end
+        #end
+        if show:
+            y_pred = (y_prob_ls >= best_proba).astype(int)
+            score = MCC(y_true_ls, y_pred)
+            logger.info('Best MCC: %s ' % str(best_mcc))
+            return best_proba, best_mcc, y_pred
+        else:
+            return best_mcc
+        #end
+    #end
+
+    def mcc_evaluator(self, y_prob_ls, dtrain):
+        '''
+        '''
+        y_true_ls = dtrain.get_label()
+        best_mcc = self.eval_mcc(y_true_ls, y_prob_ls)
+        return 'MCC', best_mcc
+    #end
+
+#end
+
 
 
 class OutputHandler():
@@ -497,5 +634,4 @@ class OutputHandler():
     #end
 
 #end
-
 

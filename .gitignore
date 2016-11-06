@@ -4,4 +4,4 @@
 *.gz
 *.zip
 *.log
-*.cred
+*lock*

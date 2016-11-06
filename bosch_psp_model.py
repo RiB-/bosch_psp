@@ -52,7 +52,7 @@ if __name__=='__main__':
     full_c_df[label_id] = full_n_df[label_id]
     logger.info('Preliminary DataFrame manipulation successful.')
 
-    Prel_Feat_Selector = PrelFeatsSelector(Feats_Selector_Classifier, num_threshold=n_feats_prel, cat_threshold=c_feats_prel, sample_dc=None)
+    Prel_Feat_Selector = PrelFeatsSelector(Feats_Selector_Classifier, num_threshold=n_feats_prel, cat_threshold=c_feats_prel, sample_dc={'numeric': 0.8, 'categorical': 0.8})
 
     n_feats = [col for col in full_n_df if col not in ['Id', 'is_test']]
     c_feats = [col for col in full_c_df if col not in ['Id', 'is_test']]
@@ -64,13 +64,18 @@ if __name__=='__main__':
     c_df = full_c_df[c_feats_ranked + ['Id', 'is_test', 'Response']]
     assembled_train_ar, responses_ar, assembled_test_ar, test_id_ar = Assembler().assemble_train_test(n_df, c_df)
 
-    pred_proba = Classifier().classify(assembled_train_ar, responses_ar, assembled_test_ar, xgb_params, cv=False)
+    np.save('./assembled_train_ar', assembled_train_ar)
+    np.save('./responses_ar', responses_ar)
+    np.save('./assembled_test_ar', assembled_test_ar)
+    np.save('./test_id_ar', test_id_ar)
+
+    pred_proba = Classifier().classify(assembled_train_ar, responses_ar, assembled_test_ar, xgb_params, cv=True)
 
     threshold = ThresholdOptimizer().get_threshold()
 
-    predictions = [0 if pred<threshold else 1 for pred in pred_proba]
+    prediction_ls = [0 if pred<threshold else 1 for pred in pred_proba]
 
-    OutputHandler().output_writer(test_id_ar.tolist(), predictions.tolist(), gz=True)
+    OutputHandler().output_writer(test_id_ar.tolist(), prediction_ls, gz=True)
 
 #end
 
