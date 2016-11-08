@@ -14,6 +14,7 @@
 import os
 import sys
 import random
+import pickle
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -123,6 +124,7 @@ class FeatsManipulator():
         '''
         '''
         logger.info('Rebalancing Train Datasets...')
+        logger.info('Original dataset shape %s' %str(df.shape))
         if isinstance(sample_index, pd.Int64Index):
             df = df.ix[sample_index]
         else:
@@ -131,6 +133,8 @@ class FeatsManipulator():
             df = pd.concat((df[df[label_id]==1], df[df[label_id]==0].sample(n=int(sample_n))))
         #end
         ind = df.index
+        logger.info('Dataset rebalanced.')
+        logger.info('Rebalanced dataset shape %s' %str(df.shape))
         return df.reset_index(drop=True), ind
     #end
 
@@ -174,12 +178,10 @@ class FeatsManipulator():
         if Imputer_obj==None:
             Imputer_obj = Imputer(strategy=strategy, axis=0)
             try:
-                logger.info('I am trying')
+                logger.info('Imputing...')
                 df[col_ls] = Imputer_obj.fit_transform(df[col_ls])
-                logger.info('It looks like I succeded. I am  puzzled.')
             except:
-                logger.info('Something went wrong')
-                return agoiang
+                logger.info('Something went wrong with the imputation.')
             #end
         else:
             df[col_ls] = Imputer_obj.transform(df[col_ls])
@@ -301,7 +303,7 @@ class FeatsManipulator():
         return df
     #end
 
-    def preliminary_manipulation(self, df_dc):
+    def preliminary_manipulation(self, df_dc, categorical=True):
         '''
         '''
         logger.info('Performing a preliminary manipulation of the datasets...')
@@ -310,22 +312,28 @@ class FeatsManipulator():
                                                         non_feats_ls=['Id'])
         n_train_df = self.low_st_remover(n_train_df, threshold=0.0)
         n_test_df = n_test_df[[col for col in n_train_df.columns if col not in ['Response']]]
-        n_train_df, balance_ind = self.rebalancer(n_train_df, label_id='Response', balance_ratio=0.01)
-        n_train_df, Imputer_obj = self.float_imputer(n_train_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=None, strategy='mean')
-        n_test_df, Imputer_obj = self.float_imputer(n_test_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=Imputer_obj, strategy='mean')
-        n_train_df, Scaler_obj = self.float_scaler(n_train_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=None)
-        n_test_df, Scaler_obj = self.float_scaler(n_test_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=Scaler_obj)
+        n_train_df, balance_ind = self.rebalancer(n_train_df, label_id='Response', balance_ratio=0.1)
+        #n_train_df, Imputer_obj = self.float_imputer(n_train_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=None, strategy='mean')
+        #n_test_df, Imputer_obj = self.float_imputer(n_test_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=Imputer_obj, strategy='mean')
+        #n_train_df, Scaler_obj = self.float_scaler(n_train_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=None)
+        #n_test_df, Scaler_obj = self.float_scaler(n_test_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=Scaler_obj)
 
         full_n_df = self.add_test_flag_and_merge(n_train_df, n_test_df, flag_type='int')
         full_n_df = self.add_leaks(full_n_df)
         full_n_df = self.data_cleansing(full_n_df, exclude_ls=['Id', 'is_test', 'Response'])
 
-        c_train_df, c_test_df = df_dc['train_categorical_df'], df_dc['test_categorical_df']
-        c_train_df, balance_ind = self.rebalancer(c_train_df, label_id='Response', sample_index=balance_ind)
-        full_c_df = self.add_test_flag_and_merge(c_train_df, c_test_df, flag_type='str')
-        full_c_df = self.data_cleansing(full_c_df, exclude_ls=['Id', 'is_test'])
+        if categorical:
+            c_train_df, c_test_df = df_dc['train_categorical_df'], df_dc['test_categorical_df']
+            c_train_df, balance_ind = self.rebalancer(c_train_df, label_id='Response', sample_index=balance_ind)
+            full_c_df = self.add_test_flag_and_merge(c_train_df, c_test_df, flag_type='str')
+            full_c_df = self.data_cleansing(full_c_df, exclude_ls=['Id', 'is_test'])
+            full_c_df = full_c_df.sort_values(by='Id')
+        else:
+            c_train_df = None
+        #end
         logger.info('Preliminary manipulation of datasets performed.')
-        return full_n_df.sort_values(by='Id'), full_c_df.sort_values(by='Id')
+        full_n_df = full_n_df.sort_values(by='Id')
+        return full_n_df, full_c_df
     #end
 
 #end
@@ -402,7 +410,7 @@ class PrelFeatsSelector():
         '''
         '''
         score = make_scorer(MCC, greater_is_better=True)
-        rfecv = RFECV(estimator=self.Classifier, step=100, cv=StratifiedKFold(3), scoring=score)
+        rfecv = RFECV(estimator=self.Classifier, step=10, cv=StratifiedKFold(3), scoring=score)
         feat_ls = [col for col in feats_df.columns if col!=label_id]
         feats_df = feats_df.sample(frac=self.sample_dc['numeric'])
         feat_ar = np.array(feats_df[feat_ls])
@@ -516,6 +524,9 @@ class Classifier():
         #end
         logger.info('Training...')
         booster = xgb.train(parameters['params'], dtrain)
+        logger.info('Saving model...')
+        pickle.dump(booster, open("trained_booster.dat", "wb"))
+        logger.info('Predicting...')
         try:
             predictions = booster.predict(dtest)
         except:
@@ -610,6 +621,14 @@ class MCCThresholdOptimizer():
 
 #end
 
+class ModelOptimizer():
+    '''
+    '''
+    def __init__(self):
+        pass
+    #end
+
+#end
 
 
 class OutputHandler():
@@ -634,4 +653,5 @@ class OutputHandler():
     #end
 
 #end
+
 

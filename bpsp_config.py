@@ -49,14 +49,16 @@ url_dc = {
           'sample_subm': 'https://www.kaggle.com/c/bosch-production-line-performance/download/sample_submission.csv.zip'
           }
 
-download = False
+download = True
 
-train_sample = 10000
-test_sample = 10000
+train_sample = None #if no sampling is required
+test_sample = None #None if no sampling is required
 
-Feats_Selector_Classifier = RFC(n_estimators=50)
-n_feats_prel = 100
-c_feats_prel = 10
+feature_ranking_sample_dc = {'numeric': 0.25, 'categorical': 0.25}
+
+Feats_Selector_Classifier = RFC(n_estimators=20)
+n_feats_prel = 500
+c_feats_prel = 20
 
 label_id = 'Response'
 score = make_scorer(MCC, greater_is_better=True)
@@ -66,9 +68,9 @@ xgb_params = {'params': {
                          'colsample_bytree': 0.7,
                          'silent': 1,
                          'subsample': 0.7,
-                         'learning_rate': 0.1,
+                         'learning_rate': 0.05,
                          'objective': 'binary:logistic',
-                         'max_depth': 4,
+                         'max_depth': 7,
                          'num_parallel_tree': 1,
                          'min_child_weight': 2,
                          'scale_pos_weight': 1,
@@ -76,7 +78,7 @@ xgb_params = {'params': {
                          'base_score': 0.05
                          },
                'cross_val': {'num_boost_round': 10, 
-                           'nfold': 4, 
+                           'nfold': 5, 
                            'seed': 0, 
                            'stratified': True,
                            'early_stopping_rounds': 1,

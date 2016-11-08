@@ -20,8 +20,8 @@ import pandas as pd
 #-----------------------------
 # Import Global Variables
 #-----------------------------
-from bpsp_config import data_path, data_dc, url_dc, download, logger, train_sample, test_sample, Feats_Selector_Classifier, n_feats_prel, c_feats_prel, \
-                        label_id, xgb_params
+from bpsp_config import data_path, data_dc, url_dc, download, logger, train_sample, test_sample, feature_ranking_sample_dc, Feats_Selector_Classifier, \
+                        n_feats_prel, c_feats_prel, label_id, xgb_params
 
 #-----------------------------
 # User defined modules and functions
@@ -52,7 +52,7 @@ if __name__=='__main__':
     full_c_df[label_id] = full_n_df[label_id]
     logger.info('Preliminary DataFrame manipulation successful.')
 
-    Prel_Feat_Selector = PrelFeatsSelector(Feats_Selector_Classifier, num_threshold=n_feats_prel, cat_threshold=c_feats_prel, sample_dc={'numeric': 0.8, 'categorical': 0.8})
+    Prel_Feat_Selector = PrelFeatsSelector(Feats_Selector_Classifier, num_threshold=n_feats_prel, cat_threshold=c_feats_prel, sample_dc=feature_ranking_sample_dc)
 
     n_feats = [col for col in full_n_df if col not in ['Id', 'is_test']]
     c_feats = [col for col in full_c_df if col not in ['Id', 'is_test']]
