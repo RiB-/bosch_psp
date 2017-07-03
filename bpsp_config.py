@@ -54,10 +54,10 @@ download = True
 train_sample = None #if no sampling is required
 test_sample = None #None if no sampling is required
 
-feature_ranking_sample_dc = {'numeric': 0.25, 'categorical': 0.25}
+feature_ranking_sample_dc = {'numeric': 0.5, 'categorical': 0.25}
 
 Feats_Selector_Classifier = RFC(n_estimators=20)
-n_feats_prel = 500
+n_feats_prel = 800
 c_feats_prel = 20
 
 label_id = 'Response'
@@ -65,11 +65,11 @@ score = make_scorer(MCC, greater_is_better=True)
 
 xgb_params = {'params': {
                          'seed': 0,
-                         'colsample_bytree': 0.7,
+                         'colsample_bytree': 0.8,
                          'silent': 1,
-                         'subsample': 0.7,
-                         'learning_rate': 0.05,
-                         'objective': 'binary:logistic',
+                         'subsample': 0.8,
+                         'learning_rate': 0.01,
+                         'num_boost_round': 100,
                          'max_depth': 7,
                          'num_parallel_tree': 1,
                          'min_child_weight': 2,

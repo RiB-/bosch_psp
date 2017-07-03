@@ -51,6 +51,33 @@ class Logging():
 
 #end
 
+class Timing():
+    '''
+    '''
+    def __init__(self):
+        pass
+    #end
+
+    def timer(self, start_time=None, logger=None):
+        '''
+        '''
+        if not start_time:
+            start_time = datetime.now()
+            return start_time
+        elif start_time:
+            tmin, tsec = divmod((datetime.now() - start_time).total_seconds(), 60)
+            if not logger:
+                print(' Time taken: %i minutes and %s seconds.' % (tmin, round(tsec, 2)))
+                sys.stdout.flush()
+            else:
+                logger.info(' Time taken: %i minutes and %s seconds.' % (tmin, round(tsec, 2)))
+            #end
+        #end
+    #end
+
+#end
+
+
 #-----------------------------
 # SWAP ROWS and COLUMNS
 #-----------------------------

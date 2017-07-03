@@ -48,20 +48,21 @@ if __name__=='__main__':
     df_dc['test_categorical_df'], df_dc['test_numeric_df'], df_dc['test_date_df'] = DataReader().read_test(data_dc, test_sample=test_sample)
     logger.info('Test data successfully read. Sample: ' + str(test_sample))
 
-    full_n_df, full_c_df = FeatsManipulator().preliminary_manipulation(df_dc)
-    full_c_df[label_id] = full_n_df[label_id]
+    full_n_df, full_c_df = FeatsManipulator().preliminary_manipulation(df_dc, categorical=False)
+    del df_dc
+    #full_c_df[label_id] = full_n_df[label_id]
     logger.info('Preliminary DataFrame manipulation successful.')
 
     Prel_Feat_Selector = PrelFeatsSelector(Feats_Selector_Classifier, num_threshold=n_feats_prel, cat_threshold=c_feats_prel, sample_dc=feature_ranking_sample_dc)
 
     n_feats = [col for col in full_n_df if col not in ['Id', 'is_test']]
-    c_feats = [col for col in full_c_df if col not in ['Id', 'is_test']]
+    #c_feats = [col for col in full_c_df if col not in ['Id', 'is_test']]
 
     n_feats_ranked = Prel_Feat_Selector.select_feats(full_n_df[n_feats][full_n_df['is_test']==0], label_id=label_id, feat_type='numeric')
-    c_feats_ranked = Prel_Feat_Selector.select_feats(full_c_df[c_feats][full_c_df['is_test'].astype(int)==0], label_id=label_id, feat_type='categorical')
+    c_feats_ranked = None #Prel_Feat_Selector.select_feats(full_c_df[c_feats][full_c_df['is_test'].astype(int)==0], label_id=label_id, feat_type='categorical')
 
     n_df = full_n_df[n_feats_ranked + ['Id', 'is_test', 'Response']]
-    c_df = full_c_df[c_feats_ranked + ['Id', 'is_test', 'Response']]
+    c_df = None #full_c_df[c_feats_ranked + ['Id', 'is_test', 'Response']]
     assembled_train_ar, responses_ar, assembled_test_ar, test_id_ar = Assembler().assemble_train_test(n_df, c_df)
 
     np.save('./assembled_train_ar', assembled_train_ar)
@@ -70,6 +71,8 @@ if __name__=='__main__':
     np.save('./test_id_ar', test_id_ar)
 
     pred_proba = Classifier().classify(assembled_train_ar, responses_ar, assembled_test_ar, xgb_params, cv=True)
+
+    np.save('./pred_proba', pred_proba)
 
     threshold = ThresholdOptimizer().get_threshold()
 

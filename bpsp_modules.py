@@ -89,7 +89,7 @@ class DataReader():
                 #end
             #end
         #end
-        train_categorical_df = pd.read_csv('./train_categorical.csv', **data_dc['train_categorical.csv']['args'])
+        train_categorical_df = None #pd.read_csv('./train_categorical.csv', **data_dc['train_categorical.csv']['args'])
         train_numeric_df = pd.read_csv('./train_numeric.csv', **data_dc['train_numeric.csv']['args'])
         train_date_df = pd.read_csv('./train_date.csv', **data_dc['train_date.csv']['args'])
         return train_categorical_df, train_numeric_df, train_date_df
@@ -104,7 +104,7 @@ class DataReader():
                 #end
             #end
         #end
-        test_categorical_df = pd.read_csv('./test_categorical.csv', **data_dc['test_categorical.csv']['args'])
+        test_categorical_df = None #pd.read_csv('./test_categorical.csv', **data_dc['test_categorical.csv']['args'])
         test_numeric_df = pd.read_csv('./test_numeric.csv', **data_dc['test_numeric.csv']['args'])
         test_date_df = pd.read_csv('./test_date.csv', **data_dc['test_date.csv']['args'])
         return test_categorical_df, test_numeric_df, test_date_df
@@ -120,7 +120,7 @@ class FeatsManipulator():
         pass
     #end
 
-    def rebalancer(self, df, label_id='Response', balance_ratio=0.1, sample_index=None):
+    def rebalancer(self, df, label_id='Response', balance_ratio=0.05, sample_index=None):
         '''
         '''
         logger.info('Rebalancing Train Datasets...')
@@ -312,7 +312,7 @@ class FeatsManipulator():
                                                         non_feats_ls=['Id'])
         n_train_df = self.low_st_remover(n_train_df, threshold=0.0)
         n_test_df = n_test_df[[col for col in n_train_df.columns if col not in ['Response']]]
-        n_train_df, balance_ind = self.rebalancer(n_train_df, label_id='Response', balance_ratio=0.1)
+        n_train_df, balance_ind = self.rebalancer(n_train_df, label_id='Response', balance_ratio=0.01)
         #n_train_df, Imputer_obj = self.float_imputer(n_train_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=None, strategy='mean')
         #n_test_df, Imputer_obj = self.float_imputer(n_test_df, exclude_col_ls=['Id', 'Response'], Imputer_obj=Imputer_obj, strategy='mean')
         #n_train_df, Scaler_obj = self.float_scaler(n_train_df, exclude_col_ls=['Id', 'Response'], Scaler_obj=None)
@@ -329,7 +329,7 @@ class FeatsManipulator():
             full_c_df = self.data_cleansing(full_c_df, exclude_ls=['Id', 'is_test'])
             full_c_df = full_c_df.sort_values(by='Id')
         else:
-            c_train_df = None
+            full_c_df = None
         #end
         logger.info('Preliminary manipulation of datasets performed.')
         full_n_df = full_n_df.sort_values(by='Id')
@@ -485,15 +485,17 @@ class Assembler():
         train_n_ar = n_df[[col for col in n_df.columns if col not in ['is_test', 'Id', 'Response']]][n_df['is_test']==0]
         test_n_ar = n_df[[col for col in n_df.columns if col not in ['is_test', 'Id', 'Response']]][n_df['is_test']==1]
 
-        cols = [col for col in c_df.columns if col not in ['is_test', 'Id', 'Response']]
+        #cols = [col for col in c_df.columns if col not in ['is_test', 'Id', 'Response']]
 
-        #fitted_le_dc, fitted_ohe = CatEncoder().fit_onehot_to_cat(c_df[cols][c_df['is_test']=='0'])
-        fitted_le_dc, fitted_ohe = CatEncoder().fit_onehot_to_cat(c_df[cols])
-        encoded_train_ar = CatEncoder().transform_onehot(c_df[cols][c_df['is_test'].astype(int)==0], fitted_le_dc, fitted_ohe)  
-        encoded_test_ar = CatEncoder().transform_onehot(c_df[cols][c_df['is_test'].astype(int)==1], fitted_le_dc, fitted_ohe)
+        #fitted_le_dc, fitted_ohe = CatEncoder().fit_onehot_to_cat(c_df[cols][c_df['is_test']=='0']) THIS HAS BEEN COMMENTED LONG AGO
+        
 
-        assembled_train_ar = sparse.hstack([train_n_ar, encoded_train_ar])
-        assembled_test_ar = sparse.hstack([test_n_ar, encoded_test_ar])
+        #fitted_le_dc, fitted_ohe = CatEncoder().fit_onehot_to_cat(c_df[cols])
+        #encoded_train_ar = CatEncoder().transform_onehot(c_df[cols][c_df['is_test'].astype(int)==0], fitted_le_dc, fitted_ohe)  
+        #encoded_test_ar = CatEncoder().transform_onehot(c_df[cols][c_df['is_test'].astype(int)==1], fitted_le_dc, fitted_ohe)
+
+        assembled_train_ar = sparse.csr_matrix(train_n_ar.values) # sparse.hstack([train_n_ar, encoded_train_ar])
+        assembled_test_ar = sparse.csr_matrix(test_n_ar.values) #sparse.hstack([test_n_ar, encoded_test_ar])
        
         logger.info('Training dataset assembled!')
         return  assembled_train_ar, response_ar, assembled_test_ar, test_id_ar
